@@ -1,0 +1,17 @@
+[package]
+name = "d2rlmm-cli"
+description = "Command-line front end for D2rlmm (also the headless test harness)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "d2rlmm-cli"
+path = "src/main.rs"
+
+[dependencies]
+d2rlmm-core.workspace = true
+serde_json.workspace = true

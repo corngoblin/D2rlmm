@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=D2rlmm
+GenericName=Mod Manager
+Comment=Manage Diablo II: Resurrected mods on Linux
+Exec=d2rlmm
+Icon=io.github.corngoblin.D2rlmm
+Terminal=false
+Categories=Utility;Game;
+Keywords=Diablo;D2R;D2RMM;mod;mods;manager;
+StartupNotify=true
+StartupWMClass=io.github.corngoblin.D2rlmm

@@ -1,0 +1,41 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/casc-sys",
+    "crates/d2rlmm-core",
+    "crates/d2rlmm-cli",
+    "crates/d2rlmm-app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.92"
+license = "MIT"
+authors = ["Ferah"]
+repository = "https://github.com/corngoblin/D2rlmm"
+
+[workspace.dependencies]
+casc-sys = { path = "crates/casc-sys" }
+d2rlmm-core = { path = "crates/d2rlmm-core" }
+
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+json5 = "0.4"
+indexmap = { version = "2", features = ["serde"] }
+rquickjs = { version = "0.14", default-features = false, features = ["std"] }
+walkdir = "2"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+dirs = "7"
+log = "0.4"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = true
+
+# Debug builds of the JS engine and GTK stack are unusably slow otherwise.
+[profile.dev.package."*"]
+opt-level = 1

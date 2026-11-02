@@ -1,0 +1,46 @@
+/*
+ * Only what libadwaita does not already do for us.
+ *
+ * The rest of the app is stock Adwaita: system colours, system spacing, system
+ * typography. Anything that reaches for a literal colour here would break in dark
+ * mode or under a user's accent colour, so nothing does.
+ */
+
+.mod-subtitle {
+    opacity: 0.65;
+}
+
+.mod-id {
+    font-family: monospace;
+    font-size: 0.85em;
+    opacity: 0.5;
+}
+
+.disabled-mod {
+    opacity: 0.55;
+}
+
+.install-log {
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+.log-error {
+    color: @error_color;
+}
+
+.log-warning {
+    color: @warning_color;
+}
+
+.path-label {
+    font-family: monospace;
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+
+.section-caption {
+    font-weight: bold;
+    opacity: 0.7;
+    font-size: 0.85em;
+}

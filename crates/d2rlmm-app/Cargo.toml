@@ -1,0 +1,22 @@
+[package]
+name = "d2rlmm-app"
+description = "D2rlmm — Diablo II: Resurrected Linux Mod Manager"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "d2rlmm"
+path = "src/main.rs"
+
+[dependencies]
+d2rlmm-core.workspace = true
+serde_json.workspace = true
+
+gtk = { package = "gtk4", version = "0.11", features = ["v4_22"] }
+# The lib is published as `libadwaita` but exports the `adw` namespace everywhere
+# else in GNOME; renaming it here keeps the code idiomatic.
+adw = { package = "libadwaita", version = "0.9", features = ["v1_9"] }

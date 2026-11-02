@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  D2rlmm — an app icon in the colour language Diablo II: Resurrected already uses:
+  black stone, warm gold, and a single crimson gem. A gold gear says "mods"; the
+  gem in its centre is the soulstone, the one image everybody associates with D2.
+
+  Drawn at 128×128 with no text, no fine detail and nothing smaller than about
+  2.5 units, so it survives being scaled to 32px in a taskbar. Teeth are eight
+  rather than twelve for the same reason: twelve turn to mush at small sizes.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="stone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#241d18"/>
+      <stop offset="0.55" stop-color="#171210"/>
+      <stop offset="1" stop-color="#0b0807"/>
+    </linearGradient>
+
+    <linearGradient id="gold" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#f7e2a0"/>
+      <stop offset="0.35" stop-color="#dcb463"/>
+      <stop offset="0.7" stop-color="#b0803a"/>
+      <stop offset="1" stop-color="#8a5f24"/>
+    </linearGradient>
+
+    <linearGradient id="goldDim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c79c52"/>
+      <stop offset="1" stop-color="#7d5620"/>
+    </linearGradient>
+
+    <radialGradient id="gem" cx="0.42" cy="0.32" r="0.85">
+      <stop offset="0" stop-color="#ffb9a0"/>
+      <stop offset="0.28" stop-color="#e2432c"/>
+      <stop offset="0.72" stop-color="#9c1410"/>
+      <stop offset="1" stop-color="#4a0605"/>
+    </radialGradient>
+
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#e2432c" stop-opacity="0.55"/>
+      <stop offset="0.6" stop-color="#e2432c" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#e2432c" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.02"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- stone plate -->
+  <rect x="4" y="4" width="120" height="120" rx="27" fill="url(#stone)"/>
+  <rect x="4" y="4" width="120" height="120" rx="27" fill="url(#sheen)"/>
+  <rect x="4.75" y="4.75" width="118.5" height="118.5" rx="26.25"
+        fill="none" stroke="#3a2c1e" stroke-width="1.5"/>
+
+  <!-- gear teeth, eight, drawn under the ring so the ring reads as the rim -->
+  <g fill="url(#goldDim)">
+    <rect x="57" y="8.5" width="14" height="18" rx="2"/>
+    <rect x="57" y="101.5" width="14" height="18" rx="2"/>
+    <rect x="8.5" y="57" width="18" height="14" rx="2"/>
+    <rect x="101.5" y="57" width="18" height="14" rx="2"/>
+    <g transform="rotate(45 64 64)">
+      <rect x="57" y="8.5" width="14" height="18" rx="2"/>
+      <rect x="57" y="101.5" width="14" height="18" rx="2"/>
+      <rect x="8.5" y="57" width="18" height="14" rx="2"/>
+      <rect x="101.5" y="57" width="18" height="14" rx="2"/>
+    </g>
+  </g>
+
+  <!-- rim -->
+  <circle cx="64" cy="64" r="33" fill="none" stroke="url(#gold)" stroke-width="9.5"/>
+  <circle cx="64" cy="64" r="37.5" fill="none" stroke="#6d4a1c" stroke-width="1.5" opacity="0.8"/>
+  <circle cx="64" cy="64" r="28.5" fill="none" stroke="#6d4a1c" stroke-width="1.5" opacity="0.8"/>
+
+  <!-- recessed well and the soulstone in it -->
+  <circle cx="64" cy="64" r="25.5" fill="#120d0b"/>
+  <circle cx="64" cy="64" r="25.5" fill="url(#glow)"/>
+  <circle cx="64" cy="64" r="25.5" fill="none" stroke="#000000" stroke-width="1.6" opacity="0.7"/>
+
+  <g>
+    <!-- gem outline -->
+    <path d="M64 45.5 L78.5 64 L64 82.5 L49.5 64 Z"
+          fill="url(#gem)" stroke="url(#gold)" stroke-width="2.6" stroke-linejoin="round"/>
+    <!-- facet lines: two, enough to read as a cut stone, few enough to stay legible -->
+    <path d="M64 45.5 L64 82.5 M49.5 64 L78.5 64"
+          stroke="#2c0403" stroke-width="1.2" opacity="0.45"/>
+    <path d="M56.5 54.5 L64 50 L71.5 54.5" fill="none"
+          stroke="#ffd9c8" stroke-width="1.5" opacity="0.6" stroke-linecap="round"/>
+  </g>
+</svg>

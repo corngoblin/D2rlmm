@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.corngoblin.D2rlmm</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <name>D2rlmm</name>
+  <summary>Manage Diablo II: Resurrected mods on Linux</summary>
+
+  <description>
+    <p>
+      D2rlmm builds a Diablo II: Resurrected mod set from the mods you enable, in the
+      order you choose, and writes the merged game data where the game will load it.
+      It runs D2RMM mods unmodified — the mod API, the config schema and the install
+      order are the same, so existing mods work as they are.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Runs existing D2RMM mods (mod.js) unmodified in an embedded QuickJS engine</li>
+      <li>Per-mod settings generated from each mod's own mod.json</li>
+      <li>Ordering controls, because install order decides conflicts</li>
+      <li>Installs into a mod folder (for -mod NAME -txt) or straight into a data folder (for -direct -txt)</li>
+      <li>Reads vanilla data from the game's own CASC archives or from an extracted data tree</li>
+      <li>Writes a shareable error report with the log, mod list and settings</li>
+    </ul>
+    <p>
+      Launching the game is deliberately left to Steam, Lutris or whatever else already
+      does it well; D2rlmm shows you the launch options to use instead.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">io.github.corngoblin.D2rlmm.desktop</launchable>
+
+  <url type="homepage">https://github.com/corngoblin/D2rlmm</url>
+  <url type="bugtracker">https://github.com/corngoblin/D2rlmm/issues</url>
+
+  <developer id="io.github.corngoblin">
+    <name>Ferah</name>
+  </developer>
+
+  <content_rating type="oars-1.1"/>
+
+  <categories>
+    <category>Utility</category>
+    <category>Game</category>
+  </categories>
+
+  <releases>
+    <release version="0.1.0" date="2026-11-02">
+      <description>
+        <p>First release.</p>
+        <ul>
+          <li>D2RMM-compatible mod engine (mod.js, config schema, install order)</li>
+          <li>GTK4 / libadwaita interface</li>
+          <li>Mod-folder and direct data-folder install targets</li>
+          <li>CASC and extracted-data sources for vanilla files</li>
+          <li>Error reports with logs and environment</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+</component>

@@ -1,0 +1,51 @@
+{
+  "app-id": "io.github.corngoblin.D2rlmm",
+  "branch": "stable",
+  "runtime": "org.gnome.Platform",
+  "runtime-version": "50",
+  "sdk": "org.gnome.Sdk",
+  "sdk-extensions": [
+    "org.freedesktop.Sdk.Extension.rust-stable"
+  ],
+  "command": "d2rlmm",
+  "finish-args": [
+    "--share=ipc",
+    "--socket=fallback-x11",
+    "--socket=wayland",
+    "--device=dri",
+    "--filesystem=host",
+    "--talk-name=org.freedesktop.portal.Desktop",
+    "--talk-name=org.freedesktop.Notifications"
+  ],
+  "build-options": {
+    "append-path": "/usr/lib/sdk/rust-stable/bin",
+    "env": {
+      "CARGO_HOME": "/run/build/d2rlmm/cargo",
+      "CARGO_NET_OFFLINE": "true"
+    }
+  },
+  "modules": [
+    {
+      "name": "d2rlmm",
+      "buildsystem": "simple",
+      "build-commands": [
+        "cargo --offline build --release --locked -p d2rlmm-app -p d2rlmm-cli",
+        "install -Dm755 target/release/d2rlmm /app/bin/d2rlmm",
+        "install -Dm755 target/release/d2rlmm-cli /app/bin/d2rlmm-cli",
+        "install -Dm644 data/io.github.corngoblin.D2rlmm.desktop /app/share/applications/io.github.corngoblin.D2rlmm.desktop",
+        "install -Dm644 data/io.github.corngoblin.D2rlmm.metainfo.xml /app/share/metainfo/io.github.corngoblin.D2rlmm.metainfo.xml",
+        "install -Dm644 data/icons/hicolor/scalable/apps/io.github.corngoblin.D2rlmm.svg /app/share/icons/hicolor/scalable/apps/io.github.corngoblin.D2rlmm.svg",
+        "install -Dm644 LICENSE /app/share/licenses/io.github.corngoblin.D2rlmm/LICENSE"
+      ],
+      "sources": [
+        "flatpak/cargo-sources.json",
+        { "type": "file", "path": "Cargo.toml" },
+        { "type": "file", "path": "Cargo.lock" },
+        { "type": "dir", "path": "crates", "dest": "crates" },
+        { "type": "dir", "path": "vendor", "dest": "vendor" },
+        { "type": "dir", "path": "data", "dest": "data" },
+        { "type": "file", "path": "LICENSE" }
+      ]
+    }
+  ]
+}
