@@ -19,9 +19,19 @@ mod window;
 use adw::prelude::*;
 use gtk::gdk;
 use gtk::glib;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 const APP_ID: &str = "io.github.corngoblin.D2rlmm";
 const APP_NAME: &str = "D2rlmm";
+
+// Holds the one window's `Rc<MainWindow>` for the life of the process.
+//
+// This app is single-window: `MainWindow` is created on `activate`, presented, and
+// has to stay alive because all of its signal handlers hold weak references to it.
+thread_local! {
+    static LIVING_WINDOW: RefCell<Option<Rc<window::MainWindow>>> = const { RefCell::new(None) };
+}
 
 fn main() -> glib::ExitCode {
     // Answering `--version` must not need a display: it is the cheapest proof that
@@ -40,6 +50,13 @@ fn main() -> glib::ExitCode {
     app.connect_startup(|_| load_css());
     app.connect_activate(|app| {
         let window = window::MainWindow::new(app);
+        // GTK owns the GtkWindow once it is presented, but *every* handler in
+        // `window.rs` upgrades a `Weak<MainWindow>`. The `Rc` therefore needs an
+        // owner that outlives this callback: without one it is dropped on return,
+        // every `upgrade()` yields `None`, and each button, switch and menu item
+        // becomes a silent no-op while the widgets themselves still draw, animate
+        // and open popovers — which reads as a frozen app rather than a dead one.
+        LIVING_WINDOW.with(|slot| *slot.borrow_mut() = Some(window.clone()));
         window.present();
     });
 

@@ -58,86 +58,85 @@ project reuses its `casc-sys` crate and its flatpak build machinery verbatim).
 - If every mod failed and nothing was produced, do not delete the previous output.
 - Fixtures: a table column the mod compares against must not be the *last* column,
   or it carries the `\r` and the comparison silently fails while the mod "works".
+- **`Rc<MainWindow>` must be kept alive outside `connect_activate`.** Every handler in
+  `window.rs` upgrades a `Weak`, so the `Rc` returned by `MainWindow::new()` needs an
+  owner that outlives the activate closure — it is stored in a `thread_local`
+  (`main.rs::LIVING_WINDOW`). Dropped on return, the window still draws and animates and
+  popovers still open (GTK owns those), while *every* app handler becomes a no-op: switches
+  flip but never save, buttons do nothing, menu items do nothing, rows do not activate.
+  Looks exactly like a frozen app; it is a dead one. Verified the hard way in the container.
+- **An app icon's XML comment must not sit before `<svg>`.** librsvg's gdk-pixbuf loader
+  sniffs only the first bytes for `<?xml`/`<svg`, so a comment ahead of the root element
+  makes flatpak's export validation fail with `is not a valid icon: Format not recognized`
+  — while `rsvg-convert` happily renders the same file. Keep the comment inside `<svg>`.
+  (Also ship 64/128/256/512 PNGs; they are what small sizes actually use.)
+- **`AdwPreferencesGroup::set_description` and row subtitles are Pango markup.** A literal
+  `<name>` in user-facing text drops the whole string with `Element "markup" was closed,
+  but the currently open element is "name"` in the log and nothing on screen. Escape it as
+  `&lt;name&gt;`.
 
 ## Verification state
 
-- 50 core unit tests pass.
+- 52 core unit tests pass.
 - `tests/compat-example-mods.sh` runs five real upstream mods against synthesised
   vanilla data and asserts the merged output; also proves idempotence and revert.
+- **UI is now driven, not just compiled** (2026-11-02, container `d2rlmm-ui`, GTK
+  4.22.5 / libadwaita 1.9.4, debug *and* release profiles): mod list renders, a mod's
+  configure dialog is generated from `mod.json` (Increase Stack Size → 4 steppers),
+  editing a value saves to the mod's `config.json`, Reset clears it, a switch flips and
+  persists to `settings.json` while the Install label goes (3) → (4), Settings shows
+  both install targets, menu → Install log shows the run log, and Install writes
+  `mods/UIDemo/UIDemo.mpq` (9 files; misc.txt `Tome of Town Portal … 100`, rune names
+  numbered, videos replaced) with the toast `Installed 4 mod(s), 9 file(s) written`.
+  Screenshots: `testdata/ui/`.
+- Flatpak: `./flatpak/build.sh --bundle --install` succeeds end to end (icons export,
+  `appstreamcli compose` Success, bundle ~1.6 MB), the installed copy answers
+  `flatpak run --command=d2rlmm … --version` → `D2rlmm 0.1.0 (D2RMM API 1.9)`,
+  `ldd /app/bin/d2rlmm | grep -c "not found"` → 0, and the packaged binary contains the
+  fixed markup string, so the shipped build is the fixed one.
 - The CASC path is **not** verified against a real game install (no D2R on this
   machine). Extracted-data path is the verified one.
+- **Not proven:** the packaged window photographed on a real desktop. This host is
+  headless; driving the *installed sandbox* needed a synthetic X display that flatpak's
+  own X11 proxy refused (`Failed to open display`). Pixels therefore come from the
+  container harness with the same toolkit versions, packaged behaviour from the checks
+  above. Running the installed app on a real session is the one check left for a human.
 
-## RESUME HERE — "continue d2rlmm"
+## State — 2026-11-02 (after the packaging + UI pass)
 
-State at the pause (2026-11-02, evening):
+Everything through the v0.1.0 release is done:
 
-**Done and verified**
-- Core engine: 50 unit tests green (`~/.hermes/cache/scratch/d2rlmm-sdk.sh 'cargo test -p d2rlmm-core'`).
-- Real-mod compatibility: `tests/compat-example-mods.sh` runs five unmodified upstream
-  mods (Increase Stack Size, Numbered Rune Names, Short Potion Names, Skip Intro
-  Videos, Socket Punching) against synthesised vanilla data; asserts merged output,
-  idempotence, and revert. All checks pass.
-- GTK app compiles in the SDK and in a Fedora 44 container (`d2rlmm-ui`), both
-  GTK 4.22.5 / libadwaita 1.9.4.
-- Private repo created and remote configured: `github.com/corngoblin/D2rlmm`.
-- Packaging files written: manifest, desktop file, metainfo, icon SVG, build.sh,
-  cargo-sources.json, README, CHANGELOG, LICENSE, PROJECT.md.
+- Engine, app, CLI and packaging all green (see above).
+- Three real bugs were found by driving the UI and fixed: the dropped
+  `Rc<MainWindow>` (every handler dead), the icon comment before `<svg>`, and the
+  unescaped `<name>` in the Settings description.
+- `git push` to `main`, tag `v0.1.0`, release asset
+  `io.github.corngoblin.D2rlmm.flatpak` (version-free name).
 
-**Immediate blocker (next thing to fix)**
-- `./flatpak/build.sh --bundle` compiles, stages and runs `appstreamcli compose`
-  successfully, then **fails at export**:
-  `error: .../io.github.corngoblin.D2rlmm.svg is not a valid icon: Format not recognized`
-  The Rust build and the appstream metadata are fine — only icon validation fails.
-  Suspects, in order:
-  1. gdk-pixbuf in `org.flatpak.Builder` lacking the SVG loader → test with a
-     known-good SVG (e.g. Cairn's icon, which exported successfully) to tell
-     "my file is bad" from "the builder cannot read SVG at all".
-  2. The file itself: re-check with `rsvg-convert -o /tmp/x.png <svg>` and
-     `gdk-pixbuf-thumbnailer`.
-  Fix options: correct the SVG, or additionally install PNGs
-  (`data/icons/hicolor/{128x128,256x256,512x512}/apps/...png`, rendered with
-  `rsvg-convert`, and add the install lines to the manifest) and let export use PNG.
-  Do **not** ship a bundle with no icon.
+If work resumes later, the useful next steps are, in order:
+1. `flatpak install --user ~/Downloads/io.github.corngoblin.D2rlmm.flatpak` on a
+   machine with a real session and confirm the window draws with the icon in the dock.
+2. Verify the CASC path against an actual D2R install (the only untested data source).
+3. Anything from the "Known limitations" list in CHANGELOG.md.
 
-**Then, in order**
-1. Re-run `./flatpak/build.sh --bundle` → expect `io.github.corngoblin.D2rlmm.flatpak`.
-2. Install it (`./flatpak/build.sh --install` or `flatpak install --user`), then prove
-   the *installed* copy: `flatpak run --command=d2rlmm io.github.corngoblin.D2rlmm --version`
-   (the `--version` path returns before `app.run()`, so it needs no display), plus
-   `flatpak ps --columns=application`.
-3. Headless UI verification with the persistent-X11 harness (see below), which is
-   **not yet done**. Everything about the UI is unproven so far except that it builds.
-4. `git add -A && git commit && git push` (repo exists, remote `origin` set, branch `main`).
-   Nothing has been committed or pushed yet.
-5. Create release `v0.1.0` with the `.flatpak` asset named
-   `io.github.corngoblin.D2rlmm.flatpak` (version-free filename — the tag carries it;
-   the user has corrected this before).
-6. Report.
+## UI harness (how the screenshots were made)
 
-**UI harness, ready to use (app binary already built)**
-- Container `d2rlmm-ui` (Fedora 44) is up, with Xvfb, xdotool, ImageMagick, and the
-  app built at `/srv/d2rlmm/target-fc44/debug/d2rlmm` (host path
-  `~/Projects/d2rlmm/target-fc44/debug/d2rlmm`). Run as **root** inside the
-  container: rootless podman maps container-root to host uid 1000, so `dev` (uid
-  1000 in the container) cannot write to the mount.
-- Seeded state lives at `/root/.config/d2rlmm` (6 real mods, 3 enabled,
-  `data_source: preextracted`, game + extracted path pointing at
-  `/srv/d2rlmm/testdata/compat/game`, output mod name `UIDemo`).
-- Suggested persistent session (state survives between `podman exec` calls):
+- Container `d2rlmm-ui` (Fedora 44) with Xvfb, xdotool, ImageMagick, procps,
+  librsvg2-tools; project mounted at `/srv`; run as **root** inside (rootless podman
+  maps container-root to host uid 1000, so `dev` cannot write to the mount).
+- Session script: `~/.hermes/cache/scratch/d2rlmm-session.sh` copies to `/root/session.sh`
+  and starts Xvfb `:99` plus a session bus at `unix:path=/tmp/bus`.
+- Launch:
   ```sh
-  podman exec -d d2rlmm-ui sh -c 'Xvfb :99 -screen 0 1400x900x24 &
-    dbus-daemon --session --address=unix:path=/tmp/bus --fork
-    mkdir -p /tmp/xdg && chmod 700 /tmp/xdg'
   podman exec -d d2rlmm-ui env DISPLAY=:99 DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/bus \
-    HOME=/root XDG_RUNTIME_DIR=/tmp/xdg GSK_RENDERER=cairo GDK_BACKEND=x11 \
-    sh -c 'cd /srv/d2rlmm && ./target-fc44/debug/d2rlmm > /root/app.log 2>&1'
-  podman exec d2rlmm-ui env DISPLAY=:99 sh -c 'import -window root /root/01.png'
-  podman cp d2rlmm-ui:/root/01.png ~/Projects/d2rlmm/testdata/ui/01.png
+    HOME=/root XDG_RUNTIME_DIR=/tmp/xdg-root GSK_RENDERER=cairo GDK_BACKEND=x11 \
+    sh -c 'cd /srv/d2rlmm && exec ./target-fc44/debug/d2rlmm > /root/app.log 2>&1'
   ```
-  Then `xdotool` for clicks, `podman cp` files out to look at them, and check
-  `/root/app.log` for GTK CRITICALs after every interaction. Verify the *install
-  button* end to end: after clicking it, assert
-  `/srv/d2rlmm/testdata/compat/game/mods/UIDemo/UIDemo.mpq/data/global/excel/misc.txt`
-  exists and contains `Tome of Town Portal<TAB>1<TAB>100<TAB>`.
-- Screens to capture for the report: mod list, a mod's configure dialog (schema
-  generated), Settings (shows the two install targets), install log.
+- Drive with `xdotool` (`mousemove` + `mousedown 1` + `mouseup 1`, ~0.15 s apart — a
+  bare `click 1` was eaten in this no-WM session), capture `import -window root`,
+  `podman cp` out, and check `/root/app.log` after every interaction for
+  `CRITICAL`/markup warnings. The only log noise expected in the container is the
+  portal `Inhibit` warning and the MESA DRI3 warning.
+- Coordinates that work at 1400x900 with the seeded state: Configure row 1 (749, 93),
+  Install (707, 27), hamburger (631, 27), Settings item (572, 80), row-4 switch
+  (68, 279), dialog Save (640, 47) / Reset (195, 47) / close (696–714, 47).

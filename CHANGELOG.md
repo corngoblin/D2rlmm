@@ -41,6 +41,12 @@ First release.
 
 - `d2rlmm-cli list | install | version` for headless installs and scripting.
 
+### Packaging
+
+- Flatpak `io.github.corngoblin.D2rlmm` on `org.gnome.Platform//50`, bundle attached to
+  the release as `io.github.corngoblin.D2rlmm.flatpak` (version-free filename).
+- Icon shipped as SVG plus 64/128/256/512 px PNGs, in the Diablo II palette.
+
 ### Known limitations
 
 - TypeScript mods (`mod.ts`) are not run; they are reported clearly.

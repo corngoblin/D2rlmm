@@ -35,6 +35,10 @@
         "install -Dm644 data/io.github.corngoblin.D2rlmm.desktop /app/share/applications/io.github.corngoblin.D2rlmm.desktop",
         "install -Dm644 data/io.github.corngoblin.D2rlmm.metainfo.xml /app/share/metainfo/io.github.corngoblin.D2rlmm.metainfo.xml",
         "install -Dm644 data/icons/hicolor/scalable/apps/io.github.corngoblin.D2rlmm.svg /app/share/icons/hicolor/scalable/apps/io.github.corngoblin.D2rlmm.svg",
+        "install -Dm644 data/icons/hicolor/64x64/apps/io.github.corngoblin.D2rlmm.png /app/share/icons/hicolor/64x64/apps/io.github.corngoblin.D2rlmm.png",
+        "install -Dm644 data/icons/hicolor/128x128/apps/io.github.corngoblin.D2rlmm.png /app/share/icons/hicolor/128x128/apps/io.github.corngoblin.D2rlmm.png",
+        "install -Dm644 data/icons/hicolor/256x256/apps/io.github.corngoblin.D2rlmm.png /app/share/icons/hicolor/256x256/apps/io.github.corngoblin.D2rlmm.png",
+        "install -Dm644 data/icons/hicolor/512x512/apps/io.github.corngoblin.D2rlmm.png /app/share/icons/hicolor/512x512/apps/io.github.corngoblin.D2rlmm.png",
         "install -Dm644 LICENSE /app/share/licenses/io.github.corngoblin.D2rlmm/LICENSE"
       ],
       "sources": [

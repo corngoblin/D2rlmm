@@ -464,8 +464,11 @@ pub fn open_settings_dialog(window: &Rc<MainWindow>) {
     let target_group = adw::PreferencesGroup::new();
     target_group.set_title("Install target");
     target_group.set_description(Some(
+        // Group descriptions are parsed as Pango markup, so the angle brackets around
+        // the placeholders have to be escaped or GTK drops the whole string with
+        // "Element markup was closed, but the currently open element is name".
         "By default the merged data is written to \
-         mods/<name>/<name>.mpq, which the game loads with -mod <name> -txt. \
+         mods/&lt;name&gt;/&lt;name&gt;.mpq, which the game loads with -mod &lt;name&gt; -txt. \
          For a game running from extracted data (-direct -txt), write straight into \
          a data folder instead.",
     ));

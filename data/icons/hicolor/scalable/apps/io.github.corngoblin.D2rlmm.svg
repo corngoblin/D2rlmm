@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!--
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!--
   D2rlmm — an app icon in the colour language Diablo II: Resurrected already uses:
   black stone, warm gold, and a single crimson gem. A gold gear says "mods"; the
   gem in its centre is the soulstone, the one image everybody associates with D2.
@@ -7,8 +8,12 @@
   Drawn at 128×128 with no text, no fine detail and nothing smaller than about
   2.5 units, so it survives being scaled to 32px in a taskbar. Teeth are eight
   rather than twelve for the same reason: twelve turn to mush at small sizes.
--->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+
+  This comment lives *inside* <svg> on purpose: librsvg's gdk-pixbuf loader sniffs
+  only the first handful of bytes for "<svg"/"<?xml", so a comment ahead of the root
+  element makes the icon unreadable to flatpak's export validation ("Format not
+  recognized") even though rsvg-convert renders it happily.
+  -->
   <defs>
     <linearGradient id="stone" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#241d18"/>
