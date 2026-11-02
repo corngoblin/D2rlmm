@@ -127,22 +127,43 @@ project reuses its `casc-sys` crate and its flatpak build machinery verbatim).
   container harness with the same toolkit versions, packaged behaviour from the checks
   above. Running the installed app on a real session is the one check left for a human.
 
-## State — 2026-11-02 (after the packaging + UI pass)
+## State — 2026-11-02 (0.1.1 shipped; RESUME HERE on "continue d2rlmm")
 
-Everything through the v0.1.0 release is done:
+Both releases are published and installed on this machine:
 
-- Engine, app, CLI and packaging all green (see above).
-- Three real bugs were found by driving the UI and fixed: the dropped
-  `Rc<MainWindow>` (every handler dead), the icon comment before `<svg>`, and the
-  unescaped `<name>` in the Settings description.
-- `git push` to `main`, tag `v0.1.0`, release asset
-  `io.github.corngoblin.D2rlmm.flatpak` (version-free name).
+- `v0.1.0` — first release (engine, UI, flatpak, icons). Fixed on the way: dropped
+  `Rc<MainWindow>`, icon comment before `<svg>`, unescaped `<name>`.
+- `v0.1.1` — uninstall. The Install button becomes a red **Uninstall** with nothing
+  enabled; direct mode records what it wrote (`<state>/direct-install.json`) so a mod that
+  is off or deleted can still be undone; reverts create parent folders; `d2rlmm-cli
+  uninstall`; menu entry "Uninstall mods (restore vanilla)".
+- Assets keep the version-free name `io.github.corngoblin.D2rlmm.flatpak`; the tag carries
+  the version. Release digests (what was tested = what is published):
+  0.1.0 `sha256:ef8898ec…481d4`, 0.1.1 `sha256:2c9f0ed2…e710a`.
+- 54 core tests; `tests/compat-example-mods.sh` (five real upstream mods) passes through
+  the **installed bundle's own CLI**, including the direct install → uninstall leg.
 
-If work resumes later, the useful next steps are, in order:
-1. `flatpak install --user ~/Downloads/io.github.corngoblin.D2rlmm.flatpak` on a
-   machine with a real session and confirm the window draws with the icon in the dock.
-2. Verify the CASC path against an actual D2R install (the only untested data source).
-3. Anything from the "Known limitations" list in CHANGELOG.md.
+### Waiting on the user
+
+He is testing 0.1.1 on his own desktop (it is installed there). What he is exercising, and
+what to ask about first next time:
+
+1. The **Uninstall** button in the real session (only the container harness saw it so far).
+2. Whether unticking a mod and pressing Install removes it for him — and which mode he is
+   actually in (mod folder vs `-direct`), since the two have different undo paths.
+3. Whether the restored-to-vanilla behaviour in `-direct` mode is what he expects; the
+   current choice is *restore the game's copy* rather than deleting, so an unfamiliar data
+   folder is never emptied. If he would rather have files deleted when they came from the
+   archives, that is a design change, not a bug fix.
+
+### Then, in order
+
+1. CASC path against a real game install — the only data source never exercised. Needs his
+   D2R install or a copy of its archives.
+2. Anything in the "Known limitations" list (TypeScript mods, `D2RMM.extractSprite`, no
+   Nexus integration, no save editor).
+3. Only if asked: the packaged window photographed on a real desktop (blocked here — see
+   "Not proven" above).
 
 ## UI harness (how the screenshots were made)
 
