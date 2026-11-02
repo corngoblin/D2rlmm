@@ -30,7 +30,8 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Some("list") => list(&args[1..]),
-        Some("install") => install(&args[1..]),
+        Some("install") => install(&args[1..], false),
+        Some("uninstall") => install(&args[1..], true),
         Some("help") | Some("--help") | Some("-h") | None => {
             usage();
             ExitCode::SUCCESS
@@ -50,6 +51,7 @@ D2rlmm — Diablo II: Resurrected Linux Mod Manager (headless)
 
   d2rlmm-cli list    [--mods DIR]
   d2rlmm-cli install --game DIR [options]
+  d2rlmm-cli uninstall --game DIR [options]
   d2rlmm-cli version
 
 install options:
@@ -62,8 +64,13 @@ install options:
   --data-out DIR        the data folder --direct writes into (default: <game>/data,
                         or the --extracted tree). For a -direct -txt game.
   --only ID[,ID...]     install only these mod ids
-  --dry-run             revert instead of install
+  --dry-run             revert instead of install (same as `uninstall`)
   --config DIR          where mod settings live (default: XDG config)
+
+uninstall removes the install: it deletes the generated mod folder, or in --direct
+mode restores every file the mods changed (including files from mods that are no longer
+enabled) and deletes the ones they created. Pass --direct/--data-out exactly as you did
+for the install, or it will revert the wrong folder.
 
 Exit status is non-zero if any mod failed, so this is scriptable."
     );
@@ -100,7 +107,11 @@ fn list(args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn install(args: &[String]) -> ExitCode {
+/// Installs, or with `uninstall` set removes what is installed.
+///
+/// `uninstall` is the same pipeline as a revert: mods are not run for their output,
+/// only to learn which files they own, and the result is restored to vanilla.
+fn install(args: &[String], uninstall: bool) -> ExitCode {
     let game = flag(args, "--game").map(PathBuf::from);
     let extracted = flag(args, "--extracted").map(PathBuf::from);
     if game.is_none() && extracted.is_none() {
@@ -111,7 +122,7 @@ fn install(args: &[String]) -> ExitCode {
         .map(PathBuf::from)
         .unwrap_or_else(d2rlmm_core::paths::mods_dir);
     let direct = args.iter().any(|a| a == "--direct");
-    let dry_run = args.iter().any(|a| a == "--dry-run");
+    let dry_run = uninstall || args.iter().any(|a| a == "--dry-run");
     let output_name = flag(args, "--output-name").unwrap_or_else(|| "D2rlmm".to_string());
     let data_out = flag(args, "--data-out").map(PathBuf::from);
 
@@ -133,7 +144,9 @@ fn install(args: &[String]) -> ExitCode {
             .collect(),
         None => all_mods,
     };
-    if selected.is_empty() {
+    // An empty selection is a real request when uninstalling: "restore vanilla" with
+    // no mods in the picture. It is an error only for an install.
+    if selected.is_empty() && !dry_run {
         eprintln!("nothing to install");
         return ExitCode::FAILURE;
     }
@@ -186,6 +199,7 @@ fn install(args: &[String]) -> ExitCode {
         saves_path: settings.effective_saves_path(&base_saves),
         data: Some(data),
         dry_run,
+        state_dir: None,
     };
 
     let report = match installer::install(request, &mut |progress| {

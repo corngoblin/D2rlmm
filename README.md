@@ -38,6 +38,27 @@ Requires `org.gnome.Platform` 50 (the bundle declares it as a runtime repo, so
 4. **Configure** opens the mod's own options, generated from its `mod.json`.
 5. **Install** builds the set.
 
+### Uninstalling, and switching a mod off
+
+An install is a *build*: the output folder is regenerated from the enabled mods every
+time you press Install, so switching a mod off and pressing Install again rebuilds
+without it — in mod-folder mode the folder is wiped and rebuilt, so the switched-off
+mod's files are simply not there any more.
+
+With **no mods enabled the Install button becomes Uninstall** (red). Pressing it removes
+what is installed:
+
+- **Mod folder mode**: the generated `mods/D2rlmm` folder is deleted. The game then loads
+  vanilla again.
+- **Direct mode**: every file the mods changed is restored to the game's own copy, and
+  files the mods invented are deleted. This uses a record of the last install kept in
+  `~/.local/state/d2rlmm/direct-install.json`, so it still works for mods you have since
+  switched off *or deleted from the library* — the mod does not have to be present to be
+  undone.
+
+The same thing is available headlessly: `d2rlmm-cli uninstall --game DIR` (add
+`--direct --data-out DIR` to match how you installed).
+
 ### Then launch the game with the right options
 
 The mods do nothing until the game is told to load them:

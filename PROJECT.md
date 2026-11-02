@@ -74,12 +74,37 @@ project reuses its `casc-sys` crate and its flatpak build machinery verbatim).
   `<name>` in user-facing text drops the whole string with `Element "markup" was closed,
   but the currently open element is "name"` in the log and nothing on screen. Escape it as
   `&lt;name&gt;`.
+- **Direct mode has no folder to rebuild, so uninstall needs a written record.** In
+  mod-folder mode "uninstall" is just "delete and rebuild the folder", which is why
+  switching a mod off works. Direct mode writes *into* the game's data tree: the mod that
+  wrote a file cannot be asked again once it is switched off (or deleted from the library),
+  so nothing would ever discover that file and it stays there overriding vanilla. Every
+  direct install therefore records the paths it wrote in
+  `<state>/direct-install.json`, the next install restores whatever the current mod set no
+  longer produces, and a revert unions the record with the current store before restoring.
+- **A restore must create its parent folders.** `io_at` only wraps the io error — it does
+  not `mkdir -p`. A revert that restores a vanilla file under a tree the mod replaced dies
+  with `No such file or directory (os error 2)` halfway through, leaving a half-reverted
+  install; `paths::ensure_dir(parent)` first.
+- **A stopped container keeps a stale `/tmp/.X99-lock` and X socket, and Xvfb then refuses
+  to start** (`Server is already active for display 99` in `/root/xvfb.log`, no display for
+  `xdotool`). Probe the *server* (`DISPLAY=:99 xdotool getdisplaygeometry`), remove lock +
+  socket, start again. The session bus has the same trap: a socket file left behind makes
+  GTK log `Unable to acquire session bus: Connection refused`, so probe it with
+  `dbus-send … org.freedesktop.DBus.GetId` before reusing `/tmp/bus`.
 
 ## Verification state
 
-- 52 core unit tests pass.
+- 54 core unit tests pass.
 - `tests/compat-example-mods.sh` runs five real upstream mods against synthesised
-  vanilla data and asserts the merged output; also proves idempotence and revert.
+  vanilla data and asserts the merged output; also proves idempotence, a mod-folder
+  uninstall, and (0.1.1) a direct-mode install followed by `d2rlmm-cli uninstall`, after
+  which every file left in the data folder is byte-identical to vanilla.
+- **Uninstall (0.1.1)** is verified in the app too: with all switches off the header button
+  becomes a red **Uninstall**, clicking it deletes `mods/UIDemo` (screenshot
+  `testdata/ui/14-uninstall-button.png`, `15-uninstalled.png`), and switching a single mod
+  off then pressing Install rebuilds without it (misc.txt/weapons.txt leave the output,
+  `d2rlmm-build.json` lists the remaining three).
 - **UI is now driven, not just compiled** (2026-11-02, container `d2rlmm-ui`, GTK
   4.22.5 / libadwaita 1.9.4, debug *and* release profiles): mod list renders, a mod's
   configure dialog is generated from `mod.json` (Increase Stack Size → 4 steppers),

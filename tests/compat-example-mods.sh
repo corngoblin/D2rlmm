@@ -175,5 +175,31 @@ echo "== uninstalling (mod folder mode)"
     || { cat "$WORK/revert.log"; fail "the revert failed"; }
 [ ! -d "$OUT/game/mods/Compat" ] || fail "revert left the mod folder behind"
 
+echo "== installing direct (data folder mode)"
+DIRECT=$WORK/direct/data
+mkdir -p "$DIRECT"
+"$CLI" install --game "$OUT/game" --extracted "$GAME" --direct --data-out "$DIRECT" \
+    --mods "$LIB" --output-name Compat > "$WORK/direct-install.log" 2>&1 \
+    || { cat "$WORK/direct-install.log"; fail "the direct install failed"; }
+
+changed=0
+for f in $(cd "$DIRECT" && find . -type f); do
+    cmp -s "$DIRECT/$f" "$GAME/data/${f#./}" || changed=1
+done
+[ "$changed" = 1 ] || fail "the direct install changed nothing — the uninstall check would be vacuous"
+
+echo "== uninstalling (direct mode)"
+"$CLI" uninstall --game "$OUT/game" --extracted "$GAME" --direct --data-out "$DIRECT" \
+    --mods "$LIB" --output-name Compat > "$WORK/direct-uninstall.log" 2>&1 \
+    || { cat "$WORK/direct-uninstall.log"; fail "the direct uninstall failed"; }
+
+# Every file still in the data folder must be byte-for-byte the game's own copy.
+# A file a mod invented has no vanilla counterpart and must have been deleted, which
+# cmp catches as a missing file.
+for f in $(cd "$DIRECT" && find . -type f); do
+    cmp -s "$DIRECT/$f" "$GAME/data/${f#./}" \
+        || { echo "  not restored to vanilla: $f" >&2; fail "the direct uninstall left a modified or invented file"; }
+done
+
 echo
 echo "compat: all checks passed"

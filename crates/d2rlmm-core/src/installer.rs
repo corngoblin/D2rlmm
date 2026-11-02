@@ -21,10 +21,12 @@
 //! store tracks whether each file came from the game or from a mod.
 
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::error::{io_at, Error, Result};
@@ -57,9 +59,16 @@ pub struct InstallRequest {
     /// The vanilla data source. Owned by the install run, and moved into the
     /// sandbox, hence the `Option`.
     pub data: Option<GameData>,
-    /// Revert instead of install (direct mode only; a mod-folder install is simply
-    /// deleted by writing a fresh one).
+    /// Revert instead of install. Both modes are covered: a mod-folder install is
+    /// deleted, and a direct install is restored to vanilla.
     pub dry_run: bool,
+    /// Where d2rlmm keeps machine state. `None` means the XDG state dir; tests pass
+    /// a temporary one.
+    ///
+    /// Direct mode needs it: the only way to undo changes from a mod that is no
+    /// longer enabled is to remember which files the last install wrote, because the
+    /// mod that knows about them is not running any more.
+    pub state_dir: Option<PathBuf>,
 }
 
 /// Progress for the UI. Deliberately coarse: a per-file callback would flood the
@@ -353,10 +362,14 @@ fn flush(state: &mut SandboxHost, request: &InstallRequest, log: &mut InstallLog
     if request.direct_mode {
         let data_dir = direct_output_dir(request);
         if request.dry_run {
-            return revert_direct(state, &data_dir, log);
+            return revert_direct(state, request, &data_dir, log);
         }
         paths::ensure_dir(&data_dir)?;
         let written = write_tree(&state.store, &data_dir)?;
+        // A mod that was switched off since the last install wrote files that are
+        // still sitting in the data folder, and nothing else knows about them. Put
+        // those back to vanilla (or delete them) before recording the new set.
+        prune_stale_direct_files(state, request, &data_dir, log)?;
         return Ok((written, data_dir));
     }
 
@@ -469,38 +482,150 @@ fn direct_output_dir(request: &InstallRequest) -> PathBuf {
         .unwrap_or_else(|| paths::data_dir_of(&request.game_path))
 }
 
-/// Direct-mode revert: restore files that came from the game, delete ones a mod made.
+/// Direct-mode revert: put back the files this install changed, delete the ones a mod
+/// invented.
 ///
-/// This reconstructs vanilla from the data source, which is why a revert needs the
-/// archives (or the extracted tree) still available. Files a mod created that were
-/// never vanilla are simply deleted.
+/// The file set is the union of what the *current* mods touch (the store) and what the
+/// **last** install recorded. The record is what makes "untick a mod, press Install"
+/// and "Uninstall" work: the mod that wrote a file is no longer running, so asking it
+/// again cannot discover the file, and without the record it would stay in the data
+/// folder overriding vanilla forever.
 fn revert_direct(
     state: &mut SandboxHost,
+    request: &InstallRequest,
     data_dir: &Path,
     log: &mut InstallLog,
 ) -> Result<(usize, PathBuf)> {
     let data_dir = data_dir.to_path_buf();
+    let mut touched: BTreeSet<String> = state.store.modified_paths().into_iter().collect();
+    touched.extend(load_direct_record(request, &data_dir));
+
     let mut restored = 0;
     let mut removed = 0;
-    for path in state.store.modified_paths() {
-        let target = data_dir.join(&path);
-        if state.store.is_extracted(&path) {
-            match state.data.read(&path)? {
-                Some(bytes) => {
-                    io_at(&target, std::fs::write(&target, bytes))?;
-                    restored += 1;
+    for path in &touched {
+        let target = data_dir.join(path);
+        match state.data.read(path)? {
+            Some(bytes) => {
+                // A revert can land where the folder no longer exists (a mod that
+                // replaced a whole tree, or a data folder built from scratch), so the
+                // parent has to be created before the write.
+                if let Some(parent) = target.parent() {
+                    paths::ensure_dir(parent)?;
                 }
-                None => log.warn(format!("cannot restore {path}: not in the game data")),
+                io_at(&target, std::fs::write(&target, bytes))?;
+                restored += 1;
             }
-        } else if target.exists() {
-            std::fs::remove_file(&target).map_err(|e| Error::io(&target, e))?;
-            removed += 1;
+            None => {
+                if target.exists() {
+                    std::fs::remove_file(&target).map_err(|e| Error::io(&target, e))?;
+                    removed += 1;
+                }
+            }
         }
     }
     log.info(format!(
         "reverted {restored} file(s) to vanilla, removed {removed} mod-created file(s)"
     ));
+    clear_direct_record(request)?;
     Ok((restored + removed, data_dir))
+}
+
+/// What the last direct-mode install wrote where.
+///
+/// Lives in the app's state dir rather than in the game folder: the data tree belongs
+/// to the game, and a stray file there is one more thing a user has to wonder about.
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct DirectRecord {
+    /// The data folder this record is about. A different folder means the record does
+    /// not apply, which is how pointing d2rlmm at another install stays safe.
+    data_dir: String,
+    files: Vec<String>,
+}
+
+fn direct_record_path(request: &InstallRequest) -> PathBuf {
+    request
+        .state_dir
+        .clone()
+        .unwrap_or_else(paths::state_dir)
+        .join("direct-install.json")
+}
+
+fn load_direct_record(request: &InstallRequest, data_dir: &Path) -> Vec<String> {
+    let path = direct_record_path(request);
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    let Ok(record) = serde_json::from_str::<DirectRecord>(&text) else {
+        return Vec::new();
+    };
+    if record.data_dir != data_dir.to_string_lossy() {
+        return Vec::new();
+    }
+    record.files
+}
+
+fn save_direct_record(request: &InstallRequest, data_dir: &Path, files: &[String]) -> Result<()> {
+    let path = direct_record_path(request);
+    if let Some(parent) = path.parent() {
+        paths::ensure_dir(parent)?;
+    }
+    let record = DirectRecord {
+        data_dir: data_dir.to_string_lossy().to_string(),
+        files: files.to_vec(),
+    };
+    let text = serde_json::to_string_pretty(&record)
+        .map_err(|e| Error::msg(format!("encoding the direct-install record: {e}")))?;
+    io_at(&path, std::fs::write(&path, text + "\n"))
+}
+
+fn clear_direct_record(request: &InstallRequest) -> Result<()> {
+    let path = direct_record_path(request);
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| Error::io(&path, e))?;
+    }
+    Ok(())
+}
+
+/// Restores or removes files the previous install wrote and the current mod set does
+/// not produce any more, then records the new set.
+fn prune_stale_direct_files(
+    state: &SandboxHost,
+    request: &InstallRequest,
+    data_dir: &Path,
+    log: &mut InstallLog,
+) -> Result<()> {
+    let previous = load_direct_record(request, data_dir);
+    let current: Vec<String> = state.store.modified_paths();
+    let keep: BTreeSet<&String> = current.iter().collect();
+
+    let mut restored = 0;
+    for path in &previous {
+        if keep.contains(path) {
+            continue;
+        }
+        let target = data_dir.join(path);
+        if !target.exists() {
+            continue;
+        }
+        match state.data.read(path)? {
+            Some(bytes) => {
+                if let Some(parent) = target.parent() {
+                    paths::ensure_dir(parent)?;
+                }
+                io_at(&target, std::fs::write(&target, bytes))?;
+            }
+            None => {
+                std::fs::remove_file(&target).map_err(|e| Error::io(&target, e))?;
+            }
+        }
+        restored += 1;
+    }
+    if restored > 0 {
+        log.info(format!(
+            "restored {restored} file(s) no longer changed by the enabled mods"
+        ));
+    }
+    save_direct_record(request, data_dir, &current)
 }
 
 /// How D2R should spell this mod's save folder in `modinfo.json`.
@@ -575,6 +700,7 @@ pub fn request_from_settings(
         saves_path: saves,
         data: Some(data),
         dry_run: false,
+        state_dir: None,
     })
 }
 
@@ -659,6 +785,7 @@ mod tests {
             saves_path: root.join("saves/mods/D2rlmm"),
             data: Some(GameData::open_directory(&game).unwrap()),
             dry_run: false,
+            state_dir: Some(root.join("state")),
         };
 
         let mut ticks = 0;
@@ -721,6 +848,7 @@ mod tests {
             saves_path: root.join("saves/mods/D2rlmm"),
             data: Some(GameData::open_directory(&game).unwrap()),
             dry_run: false,
+            state_dir: Some(root.join("state")),
         };
         install(request, &mut |_| {}).unwrap();
 
@@ -767,6 +895,7 @@ mod tests {
             saves_path: root.join("saves/mods/D2rlmm"),
             data: Some(GameData::open_directory(&game).unwrap()),
             dry_run: false,
+            state_dir: Some(root.join("state")),
         };
         let report = install(request, &mut |_| {}).unwrap();
         assert_eq!(report.failures().len(), 1);
@@ -809,6 +938,7 @@ mod tests {
             saves_path: root.join("saves/mods/D2rlmm"),
             data: Some(GameData::open_directory(&game).unwrap()),
             dry_run: false,
+            state_dir: Some(root.join("state")),
         };
         install(request, &mut |_| {}).unwrap();
         assert!(game.join("mods/D2rlmm/D2rlmm.mpq/data/global/extra.txt").is_file());
@@ -830,6 +960,7 @@ mod tests {
             saves_path: root.join("saves/mods/D2rlmm"),
             data: Some(GameData::open_directory(&game).unwrap()),
             dry_run: false,
+            state_dir: Some(root.join("state")),
         };
         install(request2, &mut |_| {}).unwrap();
         assert!(
@@ -866,6 +997,7 @@ mod tests {
             saves_path: root.join("saves/mods/D2rlmm"),
             data: Some(GameData::open_directory(&game).unwrap()),
             dry_run: false,
+            state_dir: Some(root.join("state")),
         };
         install(request, &mut |_| {}).unwrap();
         assert!(
@@ -899,6 +1031,7 @@ mod tests {
                 saves_path: root.join("saves/mods/D2rlmm"),
                 data: Some(GameData::open_directory(&game).unwrap()),
                 dry_run,
+                state_dir: Some(root.join("state")),
             };
             install(request, &mut |_| {}).unwrap();
         }
@@ -959,6 +1092,7 @@ mod tests {
             saves_path: root.join("saves/mods/D2rlmm"),
             data: Some(GameData::open_directory(&game).unwrap()),
             dry_run: false,
+            state_dir: Some(root.join("state")),
         };
         let report = install(request, &mut |_| {}).unwrap();
         assert_eq!(report.installed_count(), 1);
@@ -982,11 +1116,127 @@ mod tests {
             saves_path: root.join("saves/mods/D2rlmm"),
             data: Some(GameData::open_directory(&game).unwrap()),
             dry_run: true,
+            state_dir: Some(root.join("state")),
         };
         install(revert, &mut |_| {}).unwrap();
         let restored = std::fs::read_to_string(&target).unwrap();
         assert!(restored.contains("Gold\t100"), "vanilla not restored: {restored:?}");
         assert!(!extracted.join("global/modfile.txt").exists(), "mod-created file survived the revert");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn direct_mode_restores_files_from_a_mod_that_was_switched_off() {
+        // The case that has no other way out: the mod that wrote a file is not running
+        // any more, so only the install record remembers the file exists.
+        let root = temp("d2rlmm-direct-drop");
+        let game = root.join("game");
+        game_with_data(&game);
+        let extracted = root.join("extracted");
+        std::fs::create_dir_all(&extracted).unwrap();
+        let mods_dir = root.join("mods");
+
+        let stack = write_mod(
+            &mods_dir,
+            "StackMod",
+            json!({"name": "Stack Mod", "version": "1"}),
+            r#"
+            const misc = D2RMM.readTsv('global\\excel\\misc.txt', { removeCarriageReturns: true });
+            misc.rows[0].maxstack = '1234';
+            D2RMM.writeTsv('global\\excel\\misc.txt', misc, { addCarriageReturns: true });
+            D2RMM.writeTxt('global/stack-only.txt', 'from the stack mod');
+            "#,
+        );
+        let note = write_mod(
+            &mods_dir,
+            "NoteMod",
+            json!({"name": "Note Mod", "version": "1"}),
+            "D2RMM.writeTxt('global/note.txt', 'note');",
+        );
+
+        let request = |mods: Vec<Mod>, dry_run: bool| InstallRequest {
+            mods,
+            game_path: game.clone(),
+            output_mod_name: "D2rlmm".into(),
+            direct_mode: true,
+            direct_data_path: Some(extracted.clone()),
+            base_saves_path: root.join("saves"),
+            saves_path: root.join("saves/mods/D2rlmm"),
+            data: Some(GameData::open_directory(&game).unwrap()),
+            dry_run,
+            state_dir: Some(root.join("state")),
+        };
+
+        install(request(vec![stack, note.clone()], false), &mut |_| {}).unwrap();
+        assert!(extracted.join("global/stack-only.txt").is_file());
+        assert!(std::fs::read_to_string(extracted.join("global/excel/misc.txt"))
+            .unwrap()
+            .contains("Gold\t1234"));
+
+        // Switch the stack mod off and install again.
+        install(request(vec![note.clone()], false), &mut |_| {}).unwrap();
+        assert!(
+            !extracted.join("global/stack-only.txt").exists(),
+            "a file written by the dropped mod survived the reinstall"
+        );
+        assert!(
+            std::fs::read_to_string(extracted.join("global/excel/misc.txt"))
+                .unwrap()
+                .contains("Gold\t100"),
+            "the dropped mod's edit was not reverted to vanilla"
+        );
+        assert!(extracted.join("global/note.txt").is_file());
+
+        // Uninstall everything: vanilla back, record gone.
+        install(request(vec![], true), &mut |_| {}).unwrap();
+        assert!(!extracted.join("global/note.txt").exists());
+        assert!(std::fs::read_to_string(extracted.join("global/excel/misc.txt"))
+            .unwrap()
+            .contains("Gold\t100"));
+        assert!(
+            !root.join("state/direct-install.json").exists(),
+            "the install record outlived the uninstall"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_revert_with_no_mods_enabled_still_removes_the_mod_folder() {
+        let root = temp("d2rlmm-uninstall-modfolder");
+        let game = root.join("game");
+        game_with_data(&game);
+        let mods_dir = root.join("mods");
+        let module = write_mod(
+            &mods_dir,
+            "Anything",
+            json!({"name": "Anything", "version": "1"}),
+            "D2RMM.writeTxt('global/x.txt', 'x');",
+        );
+
+        let request = |mods: Vec<Mod>, dry_run: bool| InstallRequest {
+            mods,
+            game_path: game.clone(),
+            output_mod_name: "D2rlmm".into(),
+            direct_mode: false,
+            direct_data_path: None,
+            base_saves_path: root.join("saves"),
+            saves_path: root.join("saves/mods/D2rlmm"),
+            data: Some(GameData::open_directory(&game).unwrap()),
+            dry_run,
+            state_dir: Some(root.join("state")),
+        };
+
+        install(request(vec![module], false), &mut |_| {}).unwrap();
+        assert!(game.join("mods/D2rlmm").exists());
+
+        // Zero mods + revert is the "Uninstall" button in the UI.
+        install(request(vec![], true), &mut |_| {}).unwrap();
+        assert!(
+            !game.join("mods/D2rlmm").exists(),
+            "uninstall with no mods enabled left the mod folder behind"
+        );
 
         let _ = std::fs::remove_dir_all(&root);
     }

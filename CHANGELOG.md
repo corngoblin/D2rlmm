@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.1 — 2026-11-02
+
+### Fixed
+
+- **Uninstall.** With nothing enabled the Install button becomes **Uninstall** and removes
+  the install: it deletes the generated mod folder, or in direct mode restores every file
+  the mods changed and deletes the ones they created. Before this, the button was disabled
+  with no mods enabled, so an install could not be removed from the app at all.
+- **Direct mode left a switched-off mod's files behind.** The data folder kept whatever the
+  last install wrote, so unticking a mod and installing again still shipped its edits. The
+  install now records the files it wrote (`direct-install.json` in the state dir) and puts
+  back anything the current mod set no longer produces — including files from mods that
+  have since been deleted from the library.
+- Reverting creates parent folders before restoring a file, so a revert no longer fails with
+  `No such file or directory` on a tree a mod had replaced.
+
+### Changed
+
+- Menu: "Revert to vanilla (direct mode)" is now "Uninstall mods (restore vanilla)", and it
+  works in both modes.
+- `d2rlmm-cli uninstall` added (`--dry-run` on `install` still does the same thing).
+
 ## 0.1.0 — 2026-11-02
 
 First release.

@@ -51,7 +51,7 @@ dependencies = [
 
 [[package]]
 name = "casc-sys"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cc",
 ]
@@ -99,7 +99,7 @@ dependencies = [
 
 [[package]]
 name = "d2rlmm-app"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "d2rlmm-core",
  "gtk4",
@@ -109,7 +109,7 @@ dependencies = [
 
 [[package]]
 name = "d2rlmm-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "d2rlmm-core",
  "serde_json",
@@ -117,7 +117,7 @@ dependencies = [
 
 [[package]]
 name = "d2rlmm-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "casc-sys",
  "dirs",

@@ -183,7 +183,7 @@ impl MainWindow {
         menu.append(Some("Install log…"), Some("win.log"));
         menu.append(Some("Save error report…"), Some("win.report"));
         menu.append(Some("Rescan mod library"), Some("win.rescan"));
-        menu.append(Some("Revert to vanilla (direct mode)"), Some("win.revert"));
+        menu.append(Some("Uninstall mods (restore vanilla)"), Some("win.revert"));
         menu.append(Some("About D2rlmm"), Some("win.about"));
         self.menu_button.set_menu_model(Some(&menu));
 
@@ -219,7 +219,10 @@ impl MainWindow {
             let weak = Rc::downgrade(self);
             self.install_button.connect_clicked(move |_| {
                 if let Some(this) = weak.upgrade() {
-                    this.start_install(false);
+                    // Nothing enabled means the button is "Uninstall": remove what is
+                    // installed instead of building an empty mod folder.
+                    let revert = this.state.borrow().enabled_count() == 0;
+                    this.start_install(revert);
                 }
             });
         }
@@ -294,13 +297,8 @@ impl MainWindow {
             .set_visible_child_name(if has_mods { "list" } else { "empty" });
         self.subtitle.set_text(&subtitle);
 
-        self.install_button
-            .set_sensitive(enabled > 0 && !installing);
-        self.install_button.set_label(&if enabled > 0 {
-            format!("Install ({enabled})")
-        } else {
-            "Install".to_string()
-        });
+        self.install_button.set_sensitive(!installing);
+        self.set_install_button_state(enabled);
 
         if game_missing {
             self.banner
@@ -511,14 +509,31 @@ impl MainWindow {
     /// Cheap partial update used by the switch.
     fn update_install_button(&self) {
         let state = self.state.borrow();
-        let enabled = state.enabled_count();
-        self.install_button
-            .set_sensitive(enabled > 0 && !state.installing);
-        self.install_button.set_label(&if enabled > 0 {
-            format!("Install ({enabled})")
+        self.install_button.set_sensitive(!state.installing);
+        self.set_install_button_state(state.enabled_count());
+    }
+
+    /// The button is the whole uninstall story, so it changes meaning with no mods on.
+    ///
+    /// With nothing enabled there is nothing to build, and the files the mods left
+    /// behind are exactly what the user wants gone — upstream D2RMM turns the same
+    /// button into "Uninstall" for the same reason.
+    fn set_install_button_state(&self, enabled: usize) {
+        if enabled == 0 {
+            self.install_button.set_label("Uninstall");
+            self.install_button.remove_css_class("suggested-action");
+            self.install_button.add_css_class("destructive-action");
+            self.install_button.set_tooltip_text(Some(
+                "Remove the installed mods and restore the files they changed",
+            ));
         } else {
-            "Install".to_string()
-        });
+            self.install_button.set_label(&format!("Install ({enabled})"));
+            self.install_button.remove_css_class("destructive-action");
+            self.install_button.add_css_class("suggested-action");
+            self.install_button.set_tooltip_text(Some(
+                "Build the mod folder from the enabled mods",
+            ));
+        }
     }
 
     pub fn rescan(self: &Rc<Self>) {
@@ -548,7 +563,9 @@ impl MainWindow {
 
         let settings = self.state.borrow().settings.clone();
         let selected = installer::enabled_mods(&settings, self.state.borrow().mods.clone());
-        if selected.is_empty() {
+        // An empty list is a valid request when reverting — that is what "uninstall"
+        // means — and an error only when installing.
+        if selected.is_empty() && !revert {
             self.toast("No mods are enabled");
             return;
         }
@@ -558,7 +575,7 @@ impl MainWindow {
         self.progress.set_visible(true);
         self.progress.pulse();
         self.toast(if revert {
-            "Reverting to vanilla data…"
+            "Removing the installed mods…"
         } else {
             "Installing mods…"
         });
@@ -593,6 +610,7 @@ impl MainWindow {
                 data: Some(data),
                 direct_data_path: settings.effective_output_data_dir(),
                 dry_run: revert,
+                state_dir: None,
             };
 
             // Progress goes back over the same channel as the result; the main
