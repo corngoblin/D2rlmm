@@ -127,7 +127,53 @@ project reuses its `casc-sys` crate and its flatpak build machinery verbatim).
   container harness with the same toolkit versions, packaged behaviour from the checks
   above. Running the installed app on a real session is the one check left for a human.
 
-## State — 2026-11-02 (0.1.1 shipped; RESUME HERE on "continue d2rlmm")
+## State — 2026-11-03 (0.1.3 shipped; RESUME HERE on "continue d2rlmm")
+
+**Released:** v0.1.3 — https://github.com/corngoblin/D2rlmm/releases/tag/v0.1.3
+(asset `io.github.corngoblin.D2rlmm.flatpak`, version-free name on purpose).
+
+Shipped in 0.1.2 / 0.1.3, both verified end to end:
+
+- JS heap cap 512 MB → 4 GB, `D2RLMM_JS_MEMORY_MB` override, and a null throw is reported as a
+  probable memory abort instead of `Null"null"` (see the 0.1.2 section below).
+- Mod code is wrapped in `(function(){ … })()` like upstream, so a top-level `return` works
+  (see the IIFE section below).
+- The header button now reports pending changes: `Apply changes (N)` / `Installed (N)` /
+  `Uninstall`, driven by `install_state.rs` (`installed.json` = id + resolved config).
+
+### Next, in order (from `docs/ui-review.md`)
+
+1. **Confirm before uninstall** — the red `Uninstall` currently acts on one click.
+2. **Row subtitle `version · author`**, plus a warning icon when that mod failed last run.
+   `Mod` already carries `info.version` / `info.author`; the last run's failures are in
+   `AppState::last_report`.
+3. `Ctrl+I` install / `Ctrl+R` rescan accelerators, and put the shortcut in the tooltip.
+4. Empty-state paragraph explaining the mod folder layout (`mod.json`, `mod.js`, assets
+   relative to the folder) — the first thing a new user needs.
+5. Move install-failure reporting out of `AdwBanner` (it currently carries three unrelated
+   messages) into the log dialog, leaving the banner for configuration problems.
+6. Drag-to-reorder, or up/down buttons, plus a line explaining that later mods win.
+7. Search entry above the list — only worth it past ~50 mods (the real library has 18).
+8. **Not yet eyeballed:** the 0.1.3 button labels/classes have compiled and shipped but no
+   display here has shown them. If they read badly, it is three strings in
+   `window.rs::set_install_button_state`. The old `d2rlmm-ui` container is gone; rebuild it per
+   the UI harness section below before claiming a visual result.
+
+### Also parked
+
+- **Wayfinding mod translation** (separate job, done): English version at
+  `~/Projects/wayfinding mode 5.0`, Korean original in
+  `~/Projects/wayfinding-mode-5.0-korean-original.tar.gz`, segment map at
+  `~/Projects/wayfinding-translations/ko-en-map.json`. Tooling and the D2R
+  Korean→English name table live in the `d2rmm-mod-authoring` skill.
+- **User's mod library** (`~/Projects/mods`, on *this* host — his desktop library is separate
+  and must be synced by him): seven auto-converted MPQ ports were rewritten into minimal
+  `copyFile` mods (BlueFlameObject, GamepadEXP, SpecialNavi, Buff-Indicator, NeonRune,
+  PulPlusSFX, YupgoolgRunes). Originals kept as `mod.js.bak`. Tools in `tools/mod-library/`.
+- Three mods that never worked because of the IIFE bug (ExpandedStash, ExpandedInventory 10x8,
+  TerrorZoneCustomizer) should now run; nobody has played them in game yet.
+
+## State — 2026-11-02 (0.1.1 shipped; historical)
 
 Both releases are published and installed on this machine:
 
