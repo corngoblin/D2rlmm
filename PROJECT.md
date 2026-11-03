@@ -249,3 +249,7 @@ Trap found while doing this: `runtime.memory_usage()` **panics with "RefCell alr
 if the `Context` is still alive. Classify the caught value inside `context.with`, drop the
 context, *then* query memory and build the message. The first version of this patch crashed
 instead of reporting, which is how the trap surfaced.
+
+Probe tooling for this class of bug lives in `tools/sandbox-probe/` (see its README): a fixture
+generator that discovers every file a mod reads, a memory profiler, and a stub runner that prints
+each mod's output with hashes so two versions can be compared byte for byte.
