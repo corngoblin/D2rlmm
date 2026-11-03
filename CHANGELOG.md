@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.3 — 2026-11-03
+
+### Fixed
+
+- **Mods that use a top-level `return` could not run at all.** Upstream D2RMM evaluates each
+  mod as `(function(){ const config = …; <mod code> })()`, which is what makes the common
+  guard `if (D2RMM.getVersion() < 1.5) { D2RMM.error(…); return; }` legal. D2rlmm evaluated
+  the file as a global script, so those mods died with
+  `SyntaxError: return not in a function` before running a line
+  (ExpandedStash, ExpandedInventory, TerrorZoneCustomizer in one real library). The wrapper
+  is now applied, with the opening brace on line 1 so error line numbers still match the mod.
+
+### Changed
+
+- **The header button now knows whether it has anything to do.** It records what it installed
+  (`installed.json`, resolved config included) and compares that with the current selection:
+  `Apply changes (N)` when the game differs from the list, `Installed (N)` when it matches,
+  `Uninstall` when nothing is enabled. Previously it said `Install (N)` in every case, so
+  unticking a mod looked like it did nothing — the list is a staging area, and nothing said so.
+  (Upstream makes the same distinction by switching its button between outlined and filled.)
+
 ## 0.1.2 — 2026-11-03
 
 ### Fixed

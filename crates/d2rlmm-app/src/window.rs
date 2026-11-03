@@ -281,12 +281,13 @@ impl MainWindow {
             self.list.append(&row);
         }
 
-        let (has_mods, subtitle, enabled, installing, game_missing, load_errors) = {
+        let (has_mods, subtitle, enabled, pending, installing, game_missing, load_errors) = {
             let state = self.state.borrow();
             (
                 !state.mods.is_empty(),
                 state.data_source_summary(),
                 state.enabled_count(),
+                state.install_pending(),
                 state.installing,
                 state.game_path().is_none(),
                 state.load_errors.len(),
@@ -298,7 +299,7 @@ impl MainWindow {
         self.subtitle.set_text(&subtitle);
 
         self.install_button.set_sensitive(!installing);
-        self.set_install_button_state(enabled);
+        self.set_install_button_state(enabled, pending);
 
         if game_missing {
             self.banner
@@ -510,7 +511,9 @@ impl MainWindow {
     fn update_install_button(&self) {
         let state = self.state.borrow();
         self.install_button.set_sensitive(!state.installing);
-        self.set_install_button_state(state.enabled_count());
+        let (enabled, pending) = (state.enabled_count(), state.install_pending());
+        drop(state);
+        self.set_install_button_state(enabled, pending);
     }
 
     /// The button is the whole uninstall story, so it changes meaning with no mods on.
@@ -518,7 +521,7 @@ impl MainWindow {
     /// With nothing enabled there is nothing to build, and the files the mods left
     /// behind are exactly what the user wants gone — upstream D2RMM turns the same
     /// button into "Uninstall" for the same reason.
-    fn set_install_button_state(&self, enabled: usize) {
+    fn set_install_button_state(&self, enabled: usize, pending: bool) {
         if enabled == 0 {
             self.install_button.set_label("Uninstall");
             self.install_button.remove_css_class("suggested-action");
@@ -526,12 +529,22 @@ impl MainWindow {
             self.install_button.set_tooltip_text(Some(
                 "Remove the installed mods and restore the files they changed",
             ));
-        } else {
-            self.install_button.set_label(&format!("Install ({enabled})"));
+        } else if pending {
+            self.install_button
+                .set_label(&format!("Apply changes ({enabled})"));
             self.install_button.remove_css_class("destructive-action");
             self.install_button.add_css_class("suggested-action");
             self.install_button.set_tooltip_text(Some(
-                "Build the mod folder from the enabled mods",
+                "Your selection differs from what is installed — apply it to the game",
+            ));
+        } else {
+            // Nothing to do: stay quiet rather than shouting for attention. Upstream
+            // D2RMM makes the same distinction (outlined -> filled save icon).
+            self.install_button.set_label(&format!("Installed ({enabled})"));
+            self.install_button.remove_css_class("destructive-action");
+            self.install_button.remove_css_class("suggested-action");
+            self.install_button.set_tooltip_text(Some(
+                "The game matches your selection. Changing it makes this button apply the change",
             ));
         }
     }
@@ -679,7 +692,13 @@ impl MainWindow {
 
     fn finish_install(self: &Rc<Self>, result: d2rlmm_core::Result<installer::InstallReport>) {
         self.progress.set_visible(false);
-        self.state.borrow_mut().installing = false;
+        {
+            let mut state = self.state.borrow_mut();
+            state.installing = false;
+            // The installer records what went in; reload it so the header stops asking
+            // for a change that has already been applied.
+            state.installed = d2rlmm_core::install_state::InstalledSet::load();
+        }
         self.update_install_button();
 
         match result {

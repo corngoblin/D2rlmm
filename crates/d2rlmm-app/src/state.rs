@@ -7,6 +7,7 @@
 
 use std::path::PathBuf;
 
+use d2rlmm_core::install_state::InstalledSet;
 use d2rlmm_core::installer::InstallReport;
 use d2rlmm_core::mods::{self, Mod};
 use d2rlmm_core::settings::Settings;
@@ -14,6 +15,9 @@ use d2rlmm_core::settings::Settings;
 pub struct AppState {
     pub settings: Settings,
     pub mods: Vec<Mod>,
+    /// What the last successful install wrote into the game, so the header can tell
+    /// "you changed the selection" from "nothing to do".
+    pub installed: InstalledSet,
     /// Folders in the library that are not loadable mods, with the reason.
     pub load_errors: Vec<String>,
     /// The most recent install run, kept so the log can be reopened.
@@ -28,6 +32,7 @@ impl AppState {
         let mut state = Self {
             settings,
             mods: Vec::new(),
+            installed: InstalledSet::load(),
             load_errors: Vec::new(),
             last_report: None,
             installing: false,
@@ -81,6 +86,16 @@ impl AppState {
             .iter()
             .filter(|m| self.settings.is_enabled(&m.id))
             .count()
+    }
+
+    /// True when the selection differs from what is actually installed in the game.
+    ///
+    /// Toggling a switch only edits the selection; the game is untouched until Install
+    /// runs. Without this comparison the header button looks the same either way, which
+    /// is exactly how "I unticked it and nothing happened" feels.
+    pub fn install_pending(&self) -> bool {
+        let selected = d2rlmm_core::installer::enabled_mods(&self.settings, self.mods.clone());
+        InstalledSet::from_mods(&selected) != self.installed
     }
 
     /// Moves a mod one slot up or down in the install order.

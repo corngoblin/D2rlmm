@@ -223,7 +223,17 @@ pub fn run_mod(host: Rc<RefCell<SandboxHost>>, code: &str, config_json: &str) ->
         ctx.eval::<(), _>(PRELUDE.as_bytes())
             .catch(&ctx)
             .map_err(|e| Error::msg(format!("sandbox setup failed: {e}")))?;
-        match ctx.eval::<(), _>(code.as_bytes()).catch(&ctx) {
+        // Upstream D2RMM evaluates each mod as
+        //   (function(){ const config = ...; <mod code> })()
+        // and that wrapper is load-bearing: a top-level `return` is a *parse* error in
+        // a global script but perfectly legal inside a function. Several real mods bail
+        // out with `if (D2RMM.getVersion() < 1.5) { D2RMM.error(...); return; }`, so
+        // without the wrapper they cannot run at all ("return not in a function").
+        // The opening brace stays on line 1 so syntax errors still report the mod's own
+        // line numbers; `config` is already a global from the prelude, so nothing else
+        // needs injecting.
+        let wrapped = format!("(function(){{{}\n}})();", code);
+        match ctx.eval::<(), _>(wrapped.as_bytes()).catch(&ctx) {
             Ok(()) => Ok(RunOutcome::Ok),
             Err(CaughtError::Value(value)) if value.is_null() || value.is_undefined() => {
                 Ok(RunOutcome::Silent)

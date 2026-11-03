@@ -253,3 +253,22 @@ instead of reporting, which is how the trap surfaced.
 Probe tooling for this class of bug lives in `tools/sandbox-probe/` (see its README): a fixture
 generator that discovers every file a mod reads, a memory profiler, and a stub runner that prints
 each mod's output with hashes so two versions can be compared byte for byte.
+
+## Compatibility trap found 2026-11-03: the IIFE wrapper
+
+Upstream runs each mod as `(function(){ const config = JSON.parse(D2RMM.getConfigJSON()); <code> })()`
+(BridgeAPI.ts:987). That wrapper is load-bearing, not cosmetic: a **top-level `return` is a parse
+error in a global script** but legal inside a function, and real mods ship the guard
+`if (D2RMM.getVersion() < 1.5) { D2RMM.error(…); return; }`.
+
+Three mods in Siv's library (ExpandedStash, ExpandedInventory 10x8, TerrorZoneCustomizer) failed
+with `SyntaxError: return not in a function` for exactly this reason. `js.rs` now wraps the code
+the same way, keeping `(function(){` on line 1 so error line numbers still match the mod file
+(`config` is already a global from our prelude, so nothing is injected).
+
+Verification note: `node --check <file>` does **not** catch this — Node wraps files as CommonJS
+modules, where a top-level return is legal. Compile with `new vm.Script(code)` (global script, same
+as QuickJS) to reproduce a mod that QuickJS would reject.
+
+Also in 0.1.3: `install_state.rs` records the installed set (id + resolved config) after every run,
+which is what lets the header button say `Apply changes (N)` instead of always `Install (N)`.

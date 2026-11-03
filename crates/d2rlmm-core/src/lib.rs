@@ -39,6 +39,7 @@
 pub mod error;
 pub mod filestore;
 pub mod installer;
+pub mod install_state;
 pub mod jsonc;
 pub mod js;
 pub mod logbook;

@@ -316,6 +316,24 @@ pub fn install(mut request: InstallRequest, progress: &mut dyn FnMut(Progress)) 
 
     let (files_written, output_dir) = flush(&mut state, &request, &mut log)?;
 
+    // Record what the game now contains, so the UI can say "your selection has
+    // changed" instead of looking identical after a toggle. A revert records an empty
+    // set: nothing is installed any more.
+    {
+        let state_dir = request
+            .state_dir
+            .clone()
+            .unwrap_or_else(crate::paths::state_dir);
+        let installed = if request.dry_run {
+            crate::install_state::InstalledSet::default()
+        } else {
+            crate::install_state::InstalledSet::from_mods(&request.mods)
+        };
+        if let Err(e) = installed.save_to(&state_dir) {
+            log.warn(format!("could not record the installed mods: {e}"));
+        }
+    }
+
     log.info(format!(
         "done in {:.1}s — {files_written} file(s) written to {}",
         started.elapsed().as_secs_f64(),
