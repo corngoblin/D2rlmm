@@ -31,7 +31,7 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use rquickjs::{CatchResultExt, Context, Ctx, Function, Runtime};
+use rquickjs::{CaughtError, CatchResultExt, Context, Ctx, Function, Runtime};
 use serde_json::{Map, Value};
 
 use crate::error::{Error, Result};
@@ -199,30 +199,91 @@ const PRELUDE: &str = r#"
 })();
 "#;
 
+/// What a finished run tells us once the context is gone.
+enum RunOutcome {
+    Ok,
+    /// A readable failure (a real `Error`, with a message).
+    Message(String),
+    /// The script threw `null`/nothing at all. QuickJS does this when it aborts on its
+    /// own limits, so the reason has to be reconstructed once the context is released.
+    Silent,
+}
+
 /// Runs one mod's code against the host state.
 pub fn run_mod(host: Rc<RefCell<SandboxHost>>, code: &str, config_json: &str) -> Result<()> {
+    let limit_bytes = js_memory_limit();
     let runtime = Runtime::new().map_err(|e| Error::msg(format!("QuickJS: {e}")))?;
-    // A runaway mod should be a stopped mod, not a swapped-out machine: 512 MB is
-    // far more than any data table needs and still finite.
-    runtime.set_memory_limit(512 * 1024 * 1024);
+    runtime.set_memory_limit(limit_bytes);
     runtime.set_max_stack_size(8 * 1024 * 1024);
 
     let context = Context::full(&runtime).map_err(|e| Error::msg(format!("QuickJS: {e}")))?;
 
-    let outcome: Result<()> = context.with(|ctx| {
+    let outcome: Result<RunOutcome> = context.with(|ctx| {
         install_globals(&ctx, host.clone(), config_json)?;
         ctx.eval::<(), _>(PRELUDE.as_bytes())
             .catch(&ctx)
             .map_err(|e| Error::msg(format!("sandbox setup failed: {e}")))?;
-        ctx.eval::<(), _>(code.as_bytes())
-            .catch(&ctx)
-            .map_err(|e| Error::msg(e.to_string()))?;
-        Ok(())
+        match ctx.eval::<(), _>(code.as_bytes()).catch(&ctx) {
+            Ok(()) => Ok(RunOutcome::Ok),
+            Err(CaughtError::Value(value)) if value.is_null() || value.is_undefined() => {
+                Ok(RunOutcome::Silent)
+            }
+            Err(caught) => Ok(RunOutcome::Message(describe_failure(caught))),
+        }
     });
 
+    // The context borrows the runtime's internals; touching memory_usage() while it is
+    // alive panics with "RefCell already borrowed". Release it first, then ask.
     drop(context);
+    let result = match outcome {
+        Ok(RunOutcome::Ok) => Ok(()),
+        Ok(RunOutcome::Message(message)) => Err(Error::msg(message)),
+        Ok(RunOutcome::Silent) => {
+            let used_mb = runtime.memory_usage().memory_used_size.max(0) / (1024 * 1024);
+            Err(Error::msg(format!(
+                "the mod stopped without reporting an error — the JavaScript sandbox most likely \
+                 hit its {} MB memory limit (heap in use: {} MB). If the mod is legitimately large, \
+                 raise the limit with D2RLMM_JS_MEMORY_MB=<megabytes>.",
+                limit_bytes / (1024 * 1024),
+                used_mb,
+            )))
+        }
+        Err(e) => Err(e),
+    };
+
     drop(runtime);
-    outcome
+    result
+}
+
+/// Ceiling for one mod's JavaScript heap.
+///
+/// This exists to bound a runaway mod, never to stop a working one. 512 MB was far
+/// too small: a mod that caches every preset it touches and serialises at the end
+/// (wayfinding act3 holds hundreds of them) needs several hundred MB on its own, and
+/// on a 32 GB desktop a 512 MB cap is arbitrary pain. Override with
+/// `D2RLMM_JS_MEMORY_MB=<megabytes>`.
+const DEFAULT_JS_MEMORY_MB: usize = 4096;
+
+fn js_memory_limit() -> usize {
+    let mb = std::env::var("D2RLMM_JS_MEMORY_MB")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<usize>().ok())
+        .filter(|mb| *mb >= 64)
+        .unwrap_or(DEFAULT_JS_MEMORY_MB);
+    mb * 1024 * 1024
+}
+
+/// Turns a caught QuickJS failure into something a person can act on.
+///
+/// Only the readable cases land here; a `null`/`undefined` throw is classified as
+/// [`RunOutcome::Silent`] instead, because explaining it needs the runtime after the
+/// context is released.
+fn describe_failure(caught: CaughtError<'_>) -> String {
+    match caught {
+        CaughtError::Error(e) => e.to_string(),
+        CaughtError::Exception(e) => e.to_string(),
+        CaughtError::Value(value) => format!("the mod threw a non-Error value: {value:?}"),
+    }
 }
 
 fn install_globals(ctx: &Ctx<'_>, host: Rc<RefCell<SandboxHost>>, config_json: &str) -> Result<()> {
